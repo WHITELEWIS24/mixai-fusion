@@ -1,26 +1,24 @@
 # MixAi Fusion
 
-DJ copilot para Windows. Este repositório tem a versão com a **pesquisa de género corrigida**.
+DJ copilot para Windows. Pesquisa de género **estrita** no Fusion e no DJ Player (Solo).
 
 ## Descarregar
 
-Clica em **mixai_fusion.py** acima → botão **Download raw file** (ícone de seta).
+- [mixai_fusion.py](https://github.com/WHITELEWIS24/mixai-fusion/raw/main/mixai_fusion.py) — consola / gerenciador
+- [mixai_autodj_solo.py](https://github.com/WHITELEWIS24/mixai-fusion/raw/main/mixai_autodj_solo.py) — DJ Player (Automix)
 
-Ou descarrega directo:
-
-- [mixai_fusion.py](https://github.com/WHITELEWIS24/mixai-fusion/raw/main/mixai_fusion.py)
+No GitHub: abre o ficheiro → **Download raw file**.
 
 ## Instalar na v6.1
 
 1. Fecha o MixAi Fusion.
-2. Copia `mixai_fusion.py` para a pasta MixAi (substitui o antigo).
+2. Copia os dois `.py` para a pasta MixAi (substitui os antigos).
 3. Volta a abrir a app.
 
-## O que mudou na pesquisa
+## Pesquisa
 
 Escrever **disco** já **não** mistura House/Pop nem Afro House.
-Só mostra Disco, Nu-Disco, Disco House, e faixas com «disco» no nome.
+Só Disco, Nu-Disco, Disco House, e faixas com «disco» no nome.
 
-`house` continua a apanhar House/Pop e Afro House (são subgéneros).
-
-O **Set Planner / Harmónico** continua a cruzar géneros vizinhos — isso é o motor de sets, não a caixa de pesquisa.
+Isto vale no **Gerenciador** e no **DJ Player**.
+O Set Planner / Harmónico continua a cruzar vizinhos — isso é o motor, não a caixa de pesquisa.

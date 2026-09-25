@@ -273,9 +273,9 @@ _TX = {
                     "es": "Doble clic en una pista para definirla como referencia"},
     # A pesquisa passou a ser por FICHEIROS na pasta escolhida (e subpastas),
     # nao pela base de dados — encontra faixas ainda por analisar.
-    "search_ph":   {"pt": "procurar em toda a música (nome do ficheiro)…",
-                    "en": "search all your music (file name)…",
-                    "es": "buscar en toda la música (nombre de archivo)…"},
+    "search_ph":   {"pt": "nome, artista ou género (disco, house…)…",
+                    "en": "name, artist or genre (disco, house…)…",
+                    "es": "nombre, artista o género (disco, house…)…"},
     "l_busca_sem_pasta": {
         "pt": "[Pesquisa] Não encontrei pastas de música para procurar.",
         "en": "[Search] No music folders found to search.",
@@ -4464,7 +4464,12 @@ class AutoDJSoloWindow(QDialog):
             self._position_search_overlay()
 
     def _on_search_filter(self):
-        """Pesquisa ULTRA-RÁPIDA na base de dados (memória) e nos discos."""
+        """Pesquisa na base de dados (memória) e nos discos.
+
+        Géneros são estritos: «disco» casa Disco / Nu-Disco / Disco House
+        e nomes com disco — NÃO House/Pop nem Afro House só por
+        compatibilidade harmónica (isso fica no Set Planner).
+        """
         import unicodedata
 
         texto = self._search_edit.text().strip()
@@ -4479,8 +4484,63 @@ class AutoDJSoloWindow(QDialog):
             return
 
         def _remover_acentos(txt):
-            if not txt: return ""
-            return unicodedata.normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('utf-8').lower()
+            if not txt:
+                return ""
+            return unicodedata.normalize('NFKD', str(txt)).encode(
+                'ASCII', 'ignore').decode('utf-8').lower()
+
+        def _partes_genero(g):
+            s = _remover_acentos(g).replace('-', ' ').replace('_', ' ')
+            partes = []
+            buf = []
+            for ch in s:
+                if ch in '/|;,&':
+                    p = ''.join(buf).strip()
+                    if p:
+                        partes.append(p)
+                    buf = []
+                else:
+                    buf.append(ch)
+            p = ''.join(buf).strip()
+            if p:
+                partes.append(p)
+            return partes, s
+
+        def _genero_estrito(genero, termo):
+            """Subgénero / alias. Sem grafo de compatibilidade."""
+            t = _remover_acentos(termo).replace('-', ' ').replace('_', ' ').strip()
+            if not t:
+                return False
+            partes, g_norm = _partes_genero(genero)
+            if t == g_norm or t in partes:
+                return True
+            if len(t) >= 4:
+                if t in g_norm:
+                    return True
+                for p in partes:
+                    if t in p or p in t:
+                        return True
+            return False
+
+        def _md_de(path_norm, by_lower):
+            k = os.path.normpath(path_norm).lower()
+            inf = by_lower.get(k) or by_lower.get(k.replace('\\', '/'))
+            return inf if isinstance(inf, dict) else {}
+
+        def _casa(path_norm, inf, nome_visivel, termos):
+            inf = inf if isinstance(inf, dict) else {}
+            nome_fich = _remover_acentos(os.path.basename(path_norm))
+            vis = _remover_acentos(nome_visivel or '')
+            titulo = _remover_acentos(inf.get('title', ''))
+            artista = _remover_acentos(
+                inf.get('artist', '') or inf.get('albumartist', ''))
+            alvo = f'{nome_fich} {vis} {titulo} {artista}'
+            genero = inf.get('genre', '') or ''
+            for t in termos:
+                if t in alvo or _genero_estrito(genero, t):
+                    continue
+                return False
+            return True
 
         termos = [_remover_acentos(t) for t in texto.split() if t]
         if not termos:
@@ -4507,26 +4567,24 @@ class AutoDJSoloWindow(QDialog):
             achados = []
             vistos = set()
 
-            # 1. Pesquisa instantânea na memória (self.md)
-            md = getattr(self, "md", {}) or {}
+            md = getattr(self, 'md', {}) or {}
+            by_lower = {
+                os.path.normpath(p).lower(): i
+                for p, i in md.items() if isinstance(i, dict)
+            }
             for path_db, inf in list(md.items()):
                 if self._busca_token is not _token or len(achados) >= LIMITE:
                     break
                 if not path_db or not isinstance(inf, dict):
                     continue
                 path_norm = os.path.normpath(path_db)
-                nome_fich = _remover_acentos(os.path.basename(path_norm))
-                titulo = _remover_acentos(inf.get("title", ""))
-                artista = _remover_acentos(inf.get("artist", "") or inf.get("albumartist", ""))
-                
-                alvo = f"{nome_fich} {titulo} {artista}"
-                if all(t in alvo for t in termos):
-                    k = path_norm.lower()
-                    if k not in vistos:
-                        vistos.add(k)
-                        achados.append(path_norm)
+                if not _casa(path_norm, inf, os.path.basename(path_norm), termos):
+                    continue
+                k = path_norm.lower()
+                if k not in vistos:
+                    vistos.add(k)
+                    achados.append(path_norm)
 
-            # 2. Pesquisa nos discos/pastas
             try:
                 for _r in raizes:
                     if self._busca_token is not _token or len(achados) >= LIMITE:
@@ -4538,24 +4596,27 @@ class AutoDJSoloWindow(QDialog):
                         for n in fichs:
                             if not n.lower().endswith(_AUDIO_EXTS):
                                 continue
-                            if all(t in _remover_acentos(n) for t in termos):
-                                _f = os.path.normpath(os.path.join(base, n))
-                                _k = _f.lower()
-                                if _k not in vistos:
-                                    vistos.add(_k)
-                                    achados.append(_f)
-                                    if len(achados) >= LIMITE:
-                                        raise StopIteration
+                            _f = os.path.normpath(os.path.join(base, n))
+                            _k = _f.lower()
+                            if _k in vistos:
+                                continue
+                            inf = _md_de(_f, by_lower)
+                            if not _casa(_f, inf, n, termos):
+                                continue
+                            vistos.add(_k)
+                            achados.append(_f)
+                            if len(achados) >= LIMITE:
+                                raise StopIteration
             except StopIteration:
                 pass
             except Exception:
                 pass
 
             if self._busca_token is _token:
-                self._event_q.append(("busca", (texto, achados)))
+                self._event_q.append(('busca', (texto, achados)))
 
         import threading as _th
-        _t = _th.Thread(target=_bg, daemon=True, name="busca-global")
+        _t = _th.Thread(target=_bg, daemon=True, name='busca-global')
         self._busca_thread = _t
         _t.start()
 
